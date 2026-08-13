@@ -1,0 +1,64 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+    function role() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    // users/{uid} — the profile is only readable/writable by its owner.
+    match /users/{uid} {
+      allow read: if isOwner(uid);
+      allow create: if isOwner(uid);
+      allow update: if isOwner(uid);
+    }
+
+    // drivers/{uid} — private to that driver.
+    match /drivers/{uid} {
+      allow read, write: if isOwner(uid);
+    }
+
+    // providers/{uid} — profile is writable only by the provider themselves,
+    // but readable by any signed-in driver (needed to build the provider list).
+    match /providers/{uid} {
+      allow read: if isSignedIn();
+      allow write: if isOwner(uid);
+    }
+
+    // breakdownRequests/{id}
+    match /breakdownRequests/{requestId} {
+      allow read: if isSignedIn() && (
+        resource.data.driverId == request.auth.uid ||
+        resource.data.assignedProviderId == request.auth.uid
+      );
+      // Only a driver can create a request for themselves.
+      allow create: if isSignedIn() &&
+        request.resource.data.driverId == request.auth.uid &&
+        role() == "driver";
+      // Only the owning driver or the assigned provider may update it.
+      // Field-level business-rule enforcement (BR-01..05) is additionally
+      // applied on the client in src/lib/firestore.js; this rule is the
+      // authorisation backstop, not a full state-machine validator —
+      // moving full rule logic into Cloud Functions is a tracked technical
+      // debt item (see Section 12 of the project documentation).
+      allow update: if isSignedIn() && (
+        resource.data.driverId == request.auth.uid ||
+        resource.data.assignedProviderId == request.auth.uid ||
+        request.resource.data.assignedProviderId == request.auth.uid
+      );
+    }
+
+    // assignments/{id} — readable/writable by the driver or provider involved.
+    match /assignments/{assignmentId} {
+      allow read, create: if isSignedIn();
+      allow update: if isSignedIn() && resource.data.providerId == request.auth.uid;
+    }
+  }
+}
