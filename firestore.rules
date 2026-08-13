@@ -25,11 +25,19 @@ service cloud.firestore {
       allow read, write: if isOwner(uid);
     }
 
-    // providers/{uid} — profile is writable only by the provider themselves,
-    // but readable by any signed-in driver (needed to build the provider list).
+    // providers/{uid} — profile is fully writable only by the provider
+    // themselves, but readable by any signed-in driver (needed to build
+    // the provider list). One narrow exception: any signed-in user may
+    // flip availabilityStatus alone — this lets the driver who is
+    // assigning/cancelling a request mark a provider busy/available
+    // without needing a dedicated backend (BR-02). Moving this into a
+    // Cloud Function instead of a client-writable field is a tracked
+    // technical debt item (see project documentation Section 12).
     match /providers/{uid} {
       allow read: if isSignedIn();
       allow write: if isOwner(uid);
+      allow update: if isSignedIn() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['availabilityStatus']);
     }
 
     // breakdownRequests/{id}

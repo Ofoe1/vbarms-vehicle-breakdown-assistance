@@ -1,10 +1,10 @@
 import {
   collection, doc, addDoc, updateDoc, setDoc, getDocs, getDoc,
-  query, where, onSnapshot, serverTimestamp,
+  query, where, onSnapshot, serverTimestamp, runTransaction,
 } from "firebase/firestore";
 import { db } from "../firebase";
 import {
-  STATUS, ACTIVE_STATUSES, canCreateNewRequest, isValidTransition,
+  STATUS, canCreateNewRequest, isValidTransition,
 } from "./businessRules";
 
 // ---------- Users / role profiles ----------
@@ -80,32 +80,36 @@ export async function createBreakdownRequest(driverId, { breakdownType, descript
 
 export async function assignProvider(requestId, providerId) {
   const reqRef = doc(db, "breakdownRequests", requestId);
-  const reqSnap = await getDoc(reqRef);
-  if (!reqSnap.exists()) throw new Error("Request not found.");
-  const request = reqSnap.data();
+  const providerRef = doc(db, "providers", providerId);
 
-  if (!isValidTransition(request.status, STATUS.ASSIGNED)) {
-    throw new Error(`Cannot assign a provider from status "${request.status}".`);
-  }
+  // Runs atomically: re-checks the request's status and the provider's own
+  // availability flag (not a cross-driver query — see firestore.rules note)
+  // so BR-02 is enforced without needing permission to read other drivers'
+  // requests.
+  await runTransaction(db, async (tx) => {
+    const reqSnap = await tx.get(reqRef);
+    if (!reqSnap.exists()) throw new Error("Request not found.");
+    const request = reqSnap.data();
 
-  // BR-02: provider must not already be on an active request
-  const activeForProvider = await getDocs(
-    query(
-      collection(db, "breakdownRequests"),
-      where("assignedProviderId", "==", providerId)
-    )
-  );
-  const hasActive = activeForProvider.docs.some((d) =>
-    ACTIVE_STATUSES.includes(d.data().status)
-  );
-  if (hasActive) {
-    throw new Error("Selected provider is already handling another active request.");
-  }
+    if (!isValidTransition(request.status, STATUS.ASSIGNED)) {
+      throw new Error(`Cannot assign a provider from status "${request.status}".`);
+    }
 
-  await updateDoc(reqRef, {
-    assignedProviderId: providerId,
-    status: STATUS.ASSIGNED,
-    assignedAt: serverTimestamp(),
+    const providerSnap = await tx.get(providerRef);
+    if (!providerSnap.exists()) throw new Error("Provider not found.");
+    const provider = providerSnap.data();
+
+    // BR-02: provider must not already be on an active request
+    if (provider.availabilityStatus !== "available") {
+      throw new Error("Selected provider is already handling another active request.");
+    }
+
+    tx.update(reqRef, {
+      assignedProviderId: providerId,
+      status: STATUS.ASSIGNED,
+      assignedAt: serverTimestamp(),
+    });
+    tx.update(providerRef, { availabilityStatus: "busy" });
   });
 
   await addDoc(collection(db, "assignments"), {
@@ -128,6 +132,11 @@ export async function cancelRequest(requestId) {
     throw new Error(`Cannot cancel a request that is already "${request.status}".`);
   }
   await updateDoc(reqRef, { status: STATUS.CANCELLED, cancelledAt: serverTimestamp() });
+
+  // Free up the provider if one had already been assigned (status was Assigned).
+  if (request.assignedProviderId) {
+    await updateDoc(doc(db, "providers", request.assignedProviderId), { availabilityStatus: "available" });
+  }
 }
 
 // ---------- Breakdown requests (Provider side) ----------
@@ -153,13 +162,14 @@ export async function respondToAssignment(requestId, accept) {
     }
     await updateDoc(reqRef, { status: STATUS.ACCEPTED, acceptedAt: serverTimestamp() });
   } else {
-    // Reject: return the request to Reported and clear the assignment so
-    // the driver can pick another provider.
+    // Reject: return the request to Reported, clear the assignment, and
+    // free the provider back up so the driver can pick another provider.
     await updateDoc(reqRef, {
       status: STATUS.REPORTED,
       assignedProviderId: null,
       assignedAt: null,
     });
+    await updateDoc(doc(db, "providers", request.assignedProviderId), { availabilityStatus: "available" });
   }
 }
 
@@ -178,4 +188,9 @@ export async function updateRequestStatus(requestId, actingProviderId, toStatus)
   const patch = { status: toStatus };
   if (toStatus === STATUS.COMPLETED) patch.completedAt = serverTimestamp();
   await updateDoc(reqRef, patch);
+
+  // Free the provider back up once the job is done.
+  if (toStatus === STATUS.COMPLETED) {
+    await updateDoc(doc(db, "providers", actingProviderId), { availabilityStatus: "available" });
+  }
 }
