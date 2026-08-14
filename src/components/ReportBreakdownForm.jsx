@@ -14,7 +14,7 @@ export default function ReportBreakdownForm({ driverId }) {
   async function handleSubmit(e) {
     e.preventDefault();
     if (!type || !location) {
-      toast.error("Please fill in all required fields.");
+      toast.addToast("Please fill in all required fields.", "error");
       return;
     }
 
@@ -27,12 +27,12 @@ export default function ReportBreakdownForm({ driverId }) {
         details: details || null,
         status: "Reported",
       });
-      toast.success("Breakdown reported. Waiting for provider match…");
+      toast.addToast("Breakdown reported. Waiting for provider match…", "success");
       setType("");
       setLocation("");
       setDetails("");
     } catch (err) {
-      toast.error(err.message);
+      toast.addToast(err.message, "error");
     } finally {
       setBusy(false);
     }
@@ -48,14 +48,12 @@ export default function ReportBreakdownForm({ driverId }) {
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-trust-900 mb-2">
-          Breakdown type *
-        </label>
+        <label className="field-label">Breakdown type *</label>
         <select
           value={type}
           onChange={(e) => setType(e.target.value)}
           disabled={busy}
-          className="input w-full"
+          className="field-input"
           required
         >
           <option value="">Select a type…</option>
@@ -68,7 +66,7 @@ export default function ReportBreakdownForm({ driverId }) {
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-trust-900 mb-2 flex items-center gap-1">
+        <label className="field-label flex items-center gap-1">
           <MapPin size={16} className="text-trust-400" /> Location *
         </label>
         <input
@@ -77,13 +75,13 @@ export default function ReportBreakdownForm({ driverId }) {
           onChange={(e) => setLocation(e.target.value)}
           placeholder="E.g. Malawi, M1 junction 5"
           disabled={busy}
-          className="input w-full"
+          className="field-input"
           required
         />
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-trust-900 mb-2 flex items-center gap-1">
+        <label className="field-label flex items-center gap-1">
           <FileText size={16} className="text-trust-400" /> Additional details
         </label>
         <textarea
@@ -92,7 +90,7 @@ export default function ReportBreakdownForm({ driverId }) {
           placeholder="Any extra info (e.g. car make/model, strange noises)?"
           disabled={busy}
           rows={3}
-          className="input w-full resize-none"
+          className="field-input resize-none"
         />
       </div>
 
