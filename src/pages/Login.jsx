@@ -3,7 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { signInWithEmailAndPassword, signInWithPopup } from "firebase/auth";
 import { auth, googleProvider } from "../firebase";
 import { useToast } from "../contexts/ToastContext";
-import { Shield, Mail, Lock, LogIn } from "lucide-react";
+import { Shield, Mail, Lock, LogIn, Truck, Wrench, X } from "lucide-react";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -11,6 +11,8 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
+  const [showRoleModal, setShowRoleModal] = useState(false);
+  const [pendingUser, setPendingUser] = useState(null);
 
   async function handleEmailLogin(e) {
     e.preventDefault();
@@ -40,32 +42,56 @@ export default function Login() {
       // Check if user profile exists
       const { getDoc, doc } = await import("firebase/firestore");
       const { db } = await import("../firebase");
+      
       const profileDoc = await getDoc(doc(db, "users", user.uid));
 
       if (!profileDoc.exists()) {
-        // First time Google login — create profile
-        const { setDoc, serverTimestamp } = await import("firebase/firestore");
-        await setDoc(doc(db, "users", user.uid), {
-          name: user.displayName || "User",
-          email: user.email,
-          role: "driver", // Default to driver
-          phone: null,
-          createdAt: serverTimestamp(),
-        });
-        toast.addToast("Account created! Welcome to VBARMS.", "success");
+        // First time Google login — show role selection modal
+        setPendingUser(user);
+        setShowRoleModal(true);
       } else {
         toast.addToast("Welcome back!", "success");
+        navigate("/");
       }
-
-      navigate("/");
     } catch (err) {
+      console.error("Google login error:", err);
       if (err.code === "auth/popup-closed-by-user") {
         toast.addToast("Google login cancelled.", "info");
+      } else if (err.code === "auth/account-exists-with-different-credential") {
+        toast.addToast("This email is already registered. Please log in with your password.", "error");
       } else {
-        toast.addToast(err.message, "error");
+        toast.addToast(err.message || "Google login failed", "error");
       }
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function handleRoleSelection(role) {
+    if (!pendingUser) return;
+
+    try {
+      const { setDoc, serverTimestamp, doc } = await import("firebase/firestore");
+      const { db } = await import("../firebase");
+
+      await setDoc(doc(db, "users", pendingUser.uid), {
+        name: pendingUser.displayName || "User",
+        email: pendingUser.email,
+        role: role,
+        phone: null,
+        createdAt: serverTimestamp(),
+      });
+
+      toast.addToast(
+        `Welcome to VBARMS! You're set up as a ${role === "driver" ? "driver" : "service provider"}.`,
+        "success"
+      );
+      setShowRoleModal(false);
+      setPendingUser(null);
+      navigate("/");
+    } catch (err) {
+      console.error("Role selection error:", err);
+      toast.addToast("Failed to complete registration. Please try again.", "error");
     }
   }
 
@@ -170,6 +196,66 @@ export default function Login() {
           </div>
         </div>
       </div>
+
+      {/* Role Selection Modal */}
+      {showRoleModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center px-4 z-50">
+          <div className="card p-8 w-full max-w-md space-y-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-bold text-trust-900">Welcome!</h2>
+              <button
+                onClick={() => {
+                  setShowRoleModal(false);
+                  setPendingUser(null);
+                }}
+                className="text-trust-400 hover:text-trust-600"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <p className="text-trust-600">
+              How would you like to use VBARMS?
+            </p>
+
+            {/* Driver Option */}
+            <button
+              onClick={() => handleRoleSelection("driver")}
+              className="w-full p-4 border-2 border-trust-200 rounded-lg hover:border-trust-400 hover:bg-trust-50 transition text-left group"
+            >
+              <div className="flex items-start gap-3">
+                <Truck size={24} className="text-trust-600 group-hover:text-trust-700 flex-shrink-0 mt-1" />
+                <div>
+                  <h3 className="font-semibold text-trust-900">I need roadside help</h3>
+                  <p className="text-sm text-trust-500 mt-1">
+                    Report breakdowns and get assistance from nearby providers
+                  </p>
+                </div>
+              </div>
+            </button>
+
+            {/* Provider Option */}
+            <button
+              onClick={() => handleRoleSelection("provider")}
+              className="w-full p-4 border-2 border-trust-200 rounded-lg hover:border-hazard-300 hover:bg-amber-50 transition text-left group"
+            >
+              <div className="flex items-start gap-3">
+                <Wrench size={24} className="text-hazard-500 group-hover:text-hazard-600 flex-shrink-0 mt-1" />
+                <div>
+                  <h3 className="font-semibold text-trust-900">I offer assistance</h3>
+                  <p className="text-sm text-trust-500 mt-1">
+                    Accept roadside assistance requests and help drivers in need
+                  </p>
+                </div>
+              </div>
+            </button>
+
+            <p className="text-xs text-trust-400 text-center">
+              You can change your role in settings later
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

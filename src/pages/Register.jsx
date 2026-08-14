@@ -55,16 +55,19 @@ export default function Register() {
       await createUserProfile(user.uid, {
         name: user.displayName || "User",
         email: user.email,
-        role: "driver", // Default to driver
+        role: formData.role, // Use selected role from form
       });
 
       toast.addToast("Account created! Welcome to VBARMS.", "success");
       navigate("/");
     } catch (err) {
+      console.error("Google sign-up error:", err);
       if (err.code === "auth/popup-closed-by-user") {
         toast.addToast("Google sign-up cancelled.", "info");
+      } else if (err.code === "auth/account-exists-with-different-credential") {
+        toast.addToast("This email is already registered. Please log in instead.", "error");
       } else {
-        toast.addToast(err.message, "error");
+        toast.addToast(err.message || "Google sign-up failed", "error");
       }
     } finally {
       setBusy(false);
