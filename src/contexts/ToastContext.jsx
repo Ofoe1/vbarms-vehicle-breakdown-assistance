@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useCallback } from "react";
 import { X } from "lucide-react";
 
-const ToastContext = createContext();
+const ToastContext = createContext(null);
 
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([]);
@@ -52,6 +52,8 @@ export function ToastProvider({ children }) {
 
 export function useToast() {
   const context = useContext(ToastContext);
-  if (!context) throw new Error("useToast must be used within ToastProvider");
+  if (!context) {
+    throw new Error("useToast must be used within ToastProvider");
+  }
   return context;
 }

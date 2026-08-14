@@ -27,11 +27,39 @@ export default function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
 
-            <Route path="/driver" element={<ProtectedRoute role="driver"><DriverDashboard /></ProtectedRoute>} />
-            <Route path="/driver/history" element={<ProtectedRoute role="driver"><History /></ProtectedRoute>} />
+            <Route
+              path="/driver"
+              element={
+                <ProtectedRoute role="driver">
+                  <DriverDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/driver/history"
+              element={
+                <ProtectedRoute role="driver">
+                  <History />
+                </ProtectedRoute>
+              }
+            />
 
-            <Route path="/provider" element={<ProtectedRoute role="provider"><ProviderDashboard /></ProtectedRoute>} />
-            <Route path="/provider/history" element={<ProtectedRoute role="provider"><History /></ProtectedRoute>} />
+            <Route
+              path="/provider"
+              element={
+                <ProtectedRoute role="provider">
+                  <ProviderDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/provider/history"
+              element={
+                <ProtectedRoute role="provider">
+                  <History />
+                </ProtectedRoute>
+              }
+            />
 
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
