@@ -1,71 +1,103 @@
 import { useState } from "react";
-import { createBreakdownRequest } from "../lib/firestore";
+import { AlertCircle, MapPin, FileText } from "lucide-react";
+import { createRequest } from "../lib/firestore";
 import { BREAKDOWN_TYPES } from "../lib/businessRules";
+import { useToast } from "../contexts/ToastContext";
 
 export default function ReportBreakdownForm({ driverId }) {
-  const [breakdownType, setBreakdownType] = useState("");
-  const [description, setDescription] = useState("");
+  const toast = useToast();
+  const [type, setType] = useState("");
   const [location, setLocation] = useState("");
-  const [error, setError] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+  const [details, setDetails] = useState("");
+  const [busy, setBusy] = useState(false);
 
   async function handleSubmit(e) {
     e.preventDefault();
-    setError("");
-    if (!breakdownType || !location.trim()) {
-      setError("Breakdown type and location are required.");
+    if (!type || !location) {
+      toast.error("Please fill in all required fields.");
       return;
     }
-    setSubmitting(true);
+
+    setBusy(true);
     try {
-      await createBreakdownRequest(driverId, { breakdownType, description, location: location.trim() });
-      // Real-time listener on the dashboard will pick up the new request automatically.
+      await createRequest({
+        driverId,
+        breakdownType: type,
+        location,
+        details: details || null,
+        status: "Reported",
+      });
+      toast.success("Breakdown reported. Waiting for provider match…");
+      setType("");
+      setLocation("");
+      setDetails("");
     } catch (err) {
-      setError(err.message);
+      toast.error(err.message);
     } finally {
-      setSubmitting(false);
+      setBusy(false);
     }
   }
 
   return (
     <form onSubmit={handleSubmit} className="card p-6 space-y-4">
-      <h2 className="font-display font-semibold text-lg text-trust-900">Report a breakdown</h2>
+      <div className="flex items-center gap-2 mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+        <AlertCircle size={18} className="text-blue-600 flex-shrink-0" />
+        <p className="text-sm text-blue-900">
+          Describe your breakdown. We'll match you with the most qualified provider.
+        </p>
+      </div>
 
       <div>
-        <label className="field-label">Breakdown type</label>
-        <select className="field-input" value={breakdownType} onChange={(e) => setBreakdownType(e.target.value)}>
-          <option value="">Select type…</option>
+        <label className="block text-sm font-medium text-trust-900 mb-2">
+          Breakdown type *
+        </label>
+        <select
+          value={type}
+          onChange={(e) => setType(e.target.value)}
+          disabled={busy}
+          className="input w-full"
+          required
+        >
+          <option value="">Select a type…</option>
           {BREAKDOWN_TYPES.map((t) => (
-            <option key={t} value={t}>{t}</option>
+            <option key={t} value={t}>
+              {t}
+            </option>
           ))}
         </select>
       </div>
 
       <div>
-        <label className="field-label">Description (optional)</label>
-        <textarea
-          className="field-input"
-          rows={2}
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="Any extra detail that might help the provider"
+        <label className="block text-sm font-medium text-trust-900 mb-2 flex items-center gap-1">
+          <MapPin size={16} className="text-trust-400" /> Location *
+        </label>
+        <input
+          type="text"
+          value={location}
+          onChange={(e) => setLocation(e.target.value)}
+          placeholder="E.g. Malawi, M1 junction 5"
+          disabled={busy}
+          className="input w-full"
+          required
         />
       </div>
 
       <div>
-        <label className="field-label">Location</label>
-        <input
-          className="field-input"
-          value={location}
-          onChange={(e) => setLocation(e.target.value)}
-          placeholder="e.g. Spintex Road, near Coca-Cola Roundabout"
+        <label className="block text-sm font-medium text-trust-900 mb-2 flex items-center gap-1">
+          <FileText size={16} className="text-trust-400" /> Additional details
+        </label>
+        <textarea
+          value={details}
+          onChange={(e) => setDetails(e.target.value)}
+          placeholder="Any extra info (e.g. car make/model, strange noises)?"
+          disabled={busy}
+          rows={3}
+          className="input w-full resize-none"
         />
       </div>
 
-      {error && <p className="error-text">{error}</p>}
-
-      <button type="submit" disabled={submitting} className="btn-hazard w-full">
-        {submitting ? "Submitting…" : "Submit report"}
+      <button type="submit" disabled={busy} className="btn-primary w-full">
+        {busy ? "Reporting…" : "Report breakdown"}
       </button>
     </form>
   );

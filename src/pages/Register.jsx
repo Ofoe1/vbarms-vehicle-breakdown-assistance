@@ -1,123 +1,139 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { auth } from "../firebase";
-import { createUserProfile, updateProviderProfile } from "../lib/firestore";
-import { BREAKDOWN_TYPES } from "../lib/businessRules";
+import { createUserProfile } from "../lib/firestore";
+import { useToast } from "../contexts/ToastContext";
+import { Shield } from "lucide-react";
 
 export default function Register() {
   const navigate = useNavigate();
-  const [role, setRole] = useState("driver");
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [phone, setPhone] = useState("");
-  const [serviceTypes, setServiceTypes] = useState([]);
-  const [error, setError] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-
-  function toggleServiceType(type) {
-    setServiceTypes((prev) =>
-      prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]
-    );
-  }
+  const toast = useToast();
+  const [formData, setFormData] = useState({
+    name: "",
+    email: "",
+    password: "",
+    role: "driver",
+    phone: "",
+  });
+  const [busy, setBusy] = useState(false);
 
   async function handleSubmit(e) {
     e.preventDefault();
-    setError("");
-    if (!name.trim() || !email.trim() || password.length < 6) {
-      setError("Please fill in your name, email, and a password of at least 6 characters.");
+    if (!formData.name || !formData.email || !formData.password || !formData.role) {
+      toast.addToast("Please fill in all required fields.", "error");
       return;
     }
-    setSubmitting(true);
+
+    setBusy(true);
     try {
-      const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
-      await createUserProfile(cred.user.uid, { name: name.trim(), email: email.trim(), role, phone });
-      if (role === "provider" && serviceTypes.length) {
-        await updateProviderProfile(cred.user.uid, { serviceTypes });
-      }
-      navigate(role === "provider" ? "/provider" : "/driver");
+      const userCred = await createUserWithEmailAndPassword(
+        auth,
+        formData.email,
+        formData.password
+      );
+      await createUserProfile(userCred.user.uid, formData);
+      toast.addToast("Account created! Welcome to VBARMS.", "success");
+      navigate("/");
     } catch (err) {
-      setError(err.message || "Registration failed. Please try again.");
+      toast.addToast(err.message, "error");
     } finally {
-      setSubmitting(false);
+      setBusy(false);
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-trust-50 px-4">
-      <div className="w-full max-w-md card p-8">
-        <div className="flex items-center gap-2 mb-6">
-          <span className="w-3 h-3 rounded-sm bg-hazard-500" />
-          <h1 className="text-xl font-bold text-trust-900">Create your VBARMS account</h1>
-        </div>
-
-        <div className="flex rounded-lg border border-trust-300 overflow-hidden mb-6">
-          {["driver", "provider"].map((r) => (
-            <button
-              key={r}
-              type="button"
-              onClick={() => setRole(r)}
-              className={`flex-1 py-2 text-sm font-medium capitalize ${
-                role === r ? "bg-trust-700 text-white" : "bg-white text-trust-700"
-              }`}
-            >
-              {r === "driver" ? "I'm a Driver" : "I'm a Service Provider"}
-            </button>
-          ))}
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="field-label">Full name</label>
-            <input className="field-input" value={name} onChange={(e) => setName(e.target.value)} />
-          </div>
-          <div>
-            <label className="field-label">Email</label>
-            <input type="email" className="field-input" value={email} onChange={(e) => setEmail(e.target.value)} />
-          </div>
-          <div>
-            <label className="field-label">Password</label>
-            <input type="password" className="field-input" value={password} onChange={(e) => setPassword(e.target.value)} />
-          </div>
-          <div>
-            <label className="field-label">Phone (optional)</label>
-            <input className="field-input" value={phone} onChange={(e) => setPhone(e.target.value)} />
-          </div>
-
-          {role === "provider" && (
-            <div>
-              <label className="field-label">Services you offer</label>
-              <div className="flex flex-wrap gap-2">
-                {BREAKDOWN_TYPES.map((type) => (
-                  <button
-                    type="button"
-                    key={type}
-                    onClick={() => toggleServiceType(type)}
-                    className={`text-sm px-3 py-1.5 rounded-full border ${
-                      serviceTypes.includes(type)
-                        ? "bg-hazard-50 border-hazard-500 text-hazard-700"
-                        : "border-trust-300 text-trust-700"
-                    }`}
-                  >
-                    {type}
-                  </button>
-                ))}
-              </div>
+    <div className="min-h-screen bg-gradient-to-b from-trust-900 via-trust-800 to-trust-900 flex items-center justify-center px-4">
+      <div className="w-full max-w-md">
+        <div className="card p-8 space-y-6">
+          <div className="text-center">
+            <div className="flex justify-center mb-4">
+              <Shield className="w-10 h-10 text-amber-400" />
             </div>
-          )}
+            <h1 className="text-2xl font-bold font-display text-trust-900">VBARMS</h1>
+            <p className="text-sm text-trust-500 mt-1">Create your account</p>
+          </div>
 
-          {error && <p className="error-text">{error}</p>}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="field-label">Full name *</label>
+              <input
+                type="text"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                disabled={busy}
+                className="field-input"
+                placeholder="Your name"
+                required
+              />
+            </div>
 
-          <button type="submit" disabled={submitting} className="btn-primary w-full">
-            {submitting ? "Creating account…" : "Create account"}
-          </button>
-        </form>
+            <div>
+              <label className="field-label">Email *</label>
+              <input
+                type="email"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                disabled={busy}
+                className="field-input"
+                placeholder="you@example.com"
+                required
+              />
+            </div>
 
-        <p className="text-sm text-trust-500 mt-6 text-center">
-          Already have an account?{" "}
-          <Link to="/login" className="text-trust-700 font-medium hover:underline">Log in</Link>
-        </p>
+            <div>
+              <label className="field-label">Password *</label>
+              <input
+                type="password"
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                disabled={busy}
+                className="field-input"
+                placeholder="••••••••"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="field-label">I am a *</label>
+              <select
+                value={formData.role}
+                onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                disabled={busy}
+                className="field-input"
+                required
+              >
+                <option value="driver">Driver (need roadside help)</option>
+                <option value="provider">Provider (offer roadside help)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="field-label">Phone (optional)</label>
+              <input
+                type="tel"
+                value={formData.phone}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                disabled={busy}
+                className="field-input"
+                placeholder="+1 (555) 123-4567"
+              />
+            </div>
+
+            <button type="submit" disabled={busy} className="btn-primary w-full">
+              {busy ? "Creating account…" : "Register"}
+            </button>
+          </form>
+
+          <div className="text-center text-sm">
+            <p className="text-trust-600">
+              Already have an account?{" "}
+              <Link to="/login" className="text-trust-700 font-semibold hover:text-trust-900">
+                Sign in
+              </Link>
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );

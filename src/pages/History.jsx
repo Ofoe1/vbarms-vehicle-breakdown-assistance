@@ -1,48 +1,38 @@
-import { useEffect, useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
-import { watchDriverRequests, watchProviderAssignedRequests } from "../lib/firestore";
-import { STATUS } from "../lib/businessRules";
+import { useDriverRequests, useProviderAssignedRequests } from "../hooks/useFirestoreData";
 import NavBar from "../components/NavBar";
-
-const CLOSED = [STATUS.COMPLETED, STATUS.CANCELLED];
+import RequestCard from "../components/RequestCard";
+import DashboardSkeleton from "../components/DashboardSkeleton";
 
 export default function History() {
   const { profile } = useAuth();
-  const [requests, setRequests] = useState([]);
+  const driverRequests = useDriverRequests(profile?.role === "driver" ? profile?.id : null);
+  const providerRequests = useProviderAssignedRequests(profile?.role === "provider" ? profile?.id : null);
 
-  useEffect(() => {
-    if (!profile) return;
-    const watcher = profile.role === "provider" ? watchProviderAssignedRequests : watchDriverRequests;
-    const unsub = watcher(profile.id, setRequests);
-    return unsub;
-  }, [profile]);
-
-  const closed = requests.filter((r) => CLOSED.includes(r.status));
+  const { requests, loading } = profile?.role === "driver" ? driverRequests : providerRequests;
+  const completed = requests.filter((r) => r.status === "Completed");
 
   return (
     <div className="min-h-screen bg-trust-50">
       <NavBar />
       <main className="max-w-3xl mx-auto px-4 py-8">
-        <h1 className="text-2xl font-display font-bold text-trust-900 mb-6">History</h1>
+        <h1 className="text-2xl font-display font-bold text-trust-900 mb-1">History</h1>
+        <p className="text-trust-500 mb-6">
+          {completed.length === 0
+            ? "No completed requests yet."
+            : `${completed.length} completed request${completed.length === 1 ? "" : "s"}`}
+        </p>
 
-        {closed.length === 0 ? (
-          <p className="text-trust-400">No completed or cancelled requests yet.</p>
+        {loading ? (
+          <DashboardSkeleton />
+        ) : completed.length === 0 ? (
+          <div className="card p-8 text-center">
+            <p className="text-trust-400">Nothing to show here yet.</p>
+          </div>
         ) : (
-          <div className="space-y-2">
-            {closed.map((r) => (
-              <div key={r.id} className="card p-4 flex items-center justify-between">
-                <div>
-                  <p className="font-medium text-trust-900">{r.breakdownType}</p>
-                  <p className="text-sm text-trust-500">{r.location}</p>
-                </div>
-                <span
-                  className={`text-xs px-2.5 py-1 rounded-full font-medium text-white ${
-                    r.status === STATUS.COMPLETED ? "bg-status-completed" : "bg-status-cancelled"
-                  }`}
-                >
-                  {r.status}
-                </span>
-              </div>
+          <div className="space-y-4">
+            {completed.map((request) => (
+              <RequestCard key={request.id} request={request} />
             ))}
           </div>
         )}

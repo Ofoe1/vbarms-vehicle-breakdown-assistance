@@ -1,12 +1,22 @@
-// Business rules from the SRS (Section 8 of the project documentation).
-// Kept as pure functions so they can be unit tested in isolation, and reused
-// identically on the client (for UX) and mirrored in firestore.rules (for enforcement).
+// Business rules and constants for the VBARMS matching and request lifecycle.
+// See project documentation Section 5 (SRS) for the full specification.
+
+export const BREAKDOWN_TYPES = [
+  "Flat tyre",
+  "Battery failure",
+  "Engine overheating",
+  "Fuel issues",
+  "Lockout",
+  "Accident assistance",
+  "Towing",
+  "General assistance",
+];
 
 export const STATUS = {
   REPORTED: "Reported",
   ASSIGNED: "Assigned",
   ACCEPTED: "Accepted",
-  IN_PROGRESS: "In Progress",
+  IN_PROGRESS: "In progress",
   COMPLETED: "Completed",
   CANCELLED: "Cancelled",
 };
@@ -18,64 +28,60 @@ export const ACTIVE_STATUSES = [
   STATUS.IN_PROGRESS,
 ];
 
-// Valid forward transitions. Anything not listed here is rejected.
-const ALLOWED_TRANSITIONS = {
-  [STATUS.REPORTED]: [STATUS.ASSIGNED, STATUS.CANCELLED],
-  [STATUS.ASSIGNED]: [STATUS.ACCEPTED, STATUS.CANCELLED],
-  [STATUS.ACCEPTED]: [STATUS.IN_PROGRESS], // BR-05: cannot cancel once Accepted
-  [STATUS.IN_PROGRESS]: [STATUS.COMPLETED],
-  [STATUS.COMPLETED]: [], // BR-03: terminal
-  [STATUS.CANCELLED]: [], // terminal
-};
-
-/** BR-01: a driver cannot open a second active request while one exists. */
+// BR-01: A driver may not create two simultaneous active requests.
 export function canCreateNewRequest(existingRequests) {
-  return !existingRequests.some((r) => ACTIVE_STATUSES.includes(r.status));
+  const activeCount = existingRequests.filter((r) =>
+    ACTIVE_STATUSES.includes(r.status)
+  ).length;
+  return activeCount === 0;
 }
 
-/** BR-02: a provider cannot be assigned while already on an active request. */
-export function isProviderAvailableForAssignment(provider, providerActiveRequestCount) {
-  return provider.availabilityStatus === "available" && providerActiveRequestCount === 0;
+// BR-02: When a provider accepts a job, they become unavailable until
+// the request completes or is cancelled.
+export function validateProviderAvailability(profile, existingRequests) {
+  if (!profile || profile.availabilityStatus === "available") {
+    return true;
+  }
+  // Unavailable provider — check if they actually have an active job
+  const hasActive = existingRequests.some((r) =>
+    ACTIVE_STATUSES.includes(r.status)
+  );
+  return !hasActive; // can become available if no active jobs
 }
 
-/** BR-03 / general: is this a legal status transition? */
-export function isValidTransition(fromStatus, toStatus) {
-  const allowed = ALLOWED_TRANSITIONS[fromStatus];
-  return Array.isArray(allowed) && allowed.includes(toStatus);
-}
-
-/** BR-04: only the assigned provider may mark a request Completed. */
-export function canMarkCompleted(request, actingProviderId) {
+// BR-03: Only the assigned provider can respond to an assignment,
+// and only while status is ASSIGNED.
+export function validateProviderCanRespond(request, respondingProviderId) {
   return (
-    request.assignedProviderId === actingProviderId &&
-    request.status === STATUS.IN_PROGRESS
+    request.status === STATUS.ASSIGNED &&
+    request.assignedProviderId === respondingProviderId
   );
 }
 
-/** BR-05: a driver may cancel only before the request reaches Accepted. */
-export function canCancel(request) {
-  return request.status === STATUS.REPORTED || request.status === STATUS.ASSIGNED;
+// BR-04: Only the provider working on a request can update its status.
+export function validateProviderCanAdvance(request, actingProviderId) {
+  return request.assignedProviderId === actingProviderId;
 }
 
-// Full Tailwind class strings (not built dynamically, so the JIT compiler can find them).
-export function statusColor(status) {
-  const map = {
-    [STATUS.REPORTED]: "bg-status-reported",
-    [STATUS.ASSIGNED]: "bg-status-assigned",
-    [STATUS.ACCEPTED]: "bg-status-accepted",
-    [STATUS.IN_PROGRESS]: "bg-status-progress",
-    [STATUS.COMPLETED]: "bg-status-completed",
-    [STATUS.CANCELLED]: "bg-status-cancelled",
+// BR-05: Only the driver who created a request can cancel it while
+// it is still in REPORTED or ASSIGNED state.
+export function validateDriverCanCancel(request, actingDriverId) {
+  return (
+    request.driverId === actingDriverId &&
+    (request.status === STATUS.REPORTED || request.status === STATUS.ASSIGNED)
+  );
+}
+
+// Status transitions: what states are valid given the current status?
+export function isValidTransition(currentStatus, nextStatus) {
+  const transitions = {
+    [STATUS.REPORTED]: [STATUS.ASSIGNED, STATUS.CANCELLED],
+    [STATUS.ASSIGNED]: [STATUS.ACCEPTED, STATUS.REPORTED, STATUS.CANCELLED],
+    [STATUS.ACCEPTED]: [STATUS.IN_PROGRESS],
+    [STATUS.IN_PROGRESS]: [STATUS.COMPLETED],
+    [STATUS.COMPLETED]: [],
+    [STATUS.CANCELLED]: [],
   };
-  return map[status] || "bg-status-reported";
+  const allowed = transitions[currentStatus] || [];
+  return allowed.includes(nextStatus);
 }
-
-export const BREAKDOWN_TYPES = [
-  "Flat tyre",
-  "Battery failure",
-  "Engine problem",
-  "Fuel-related problem",
-  "Overheating",
-  "Accident",
-  "Other",
-];

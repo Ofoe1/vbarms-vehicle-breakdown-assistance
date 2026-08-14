@@ -1,54 +1,88 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "../firebase";
+import { useToast } from "../contexts/ToastContext";
+import { Shield } from "lucide-react";
 
 export default function Login() {
   const navigate = useNavigate();
+  const toast = useToast();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   async function handleSubmit(e) {
     e.preventDefault();
-    setError("");
-    setSubmitting(true);
+    if (!email || !password) {
+      toast.addToast("Please fill in all fields.", "error");
+      return;
+    }
+    setBusy(true);
     try {
-      await signInWithEmailAndPassword(auth, email.trim(), password);
-      navigate("/"); // App.jsx redirects to the right dashboard based on role
+      await signInWithEmailAndPassword(auth, email, password);
+      toast.addToast("Welcome back!", "success");
+      navigate("/");
     } catch (err) {
-      setError("Couldn't log in. Check your email and password and try again.");
+      toast.addToast(err.message, "error");
     } finally {
-      setSubmitting(false);
+      setBusy(false);
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-trust-50 px-4">
-      <div className="w-full max-w-md card p-8">
-        <div className="flex items-center gap-2 mb-6">
-          <span className="w-3 h-3 rounded-sm bg-hazard-500" />
-          <h1 className="text-xl font-bold text-trust-900">Log in to VBARMS</h1>
+    <div className="min-h-screen bg-gradient-to-b from-trust-900 via-trust-800 to-trust-900 flex items-center justify-center px-4">
+      <div className="w-full max-w-md">
+        <div className="card p-8 space-y-6">
+          <div className="text-center">
+            <div className="flex justify-center mb-4">
+              <Shield className="w-10 h-10 text-amber-400" />
+            </div>
+            <h1 className="text-2xl font-bold font-display text-trust-900">VBARMS</h1>
+            <p className="text-sm text-trust-500 mt-1">Roadside Assistance Matching</p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="field-label">Email</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={busy}
+                className="field-input"
+                placeholder="you@example.com"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="field-label">Password</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={busy}
+                className="field-input"
+                placeholder="••••••••"
+                required
+              />
+            </div>
+
+            <button type="submit" disabled={busy} className="btn-primary w-full">
+              {busy ? "Signing in…" : "Sign in"}
+            </button>
+          </form>
+
+          <div className="text-center text-sm">
+            <p className="text-trust-600">
+              Don't have an account?{" "}
+              <Link to="/register" className="text-trust-700 font-semibold hover:text-trust-900">
+                Register
+              </Link>
+            </p>
+          </div>
         </div>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="field-label">Email</label>
-            <input type="email" className="field-input" value={email} onChange={(e) => setEmail(e.target.value)} />
-          </div>
-          <div>
-            <label className="field-label">Password</label>
-            <input type="password" className="field-input" value={password} onChange={(e) => setPassword(e.target.value)} />
-          </div>
-          {error && <p className="error-text">{error}</p>}
-          <button type="submit" disabled={submitting} className="btn-primary w-full">
-            {submitting ? "Logging in…" : "Log in"}
-          </button>
-        </form>
-        <p className="text-sm text-trust-500 mt-6 text-center">
-          New to VBARMS?{" "}
-          <Link to="/register" className="text-trust-700 font-medium hover:underline">Create an account</Link>
-        </p>
       </div>
     </div>
   );

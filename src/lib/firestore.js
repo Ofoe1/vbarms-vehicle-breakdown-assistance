@@ -1,11 +1,12 @@
 import {
   collection, doc, addDoc, updateDoc, setDoc, getDocs, getDoc,
-  query, where, onSnapshot, serverTimestamp, runTransaction,
+  query, where, onSnapshot, serverTimestamp, runTransaction, increment,
 } from "firebase/firestore";
 import { db } from "../firebase";
 import {
   STATUS, canCreateNewRequest, isValidTransition,
 } from "./businessRules";
+import { filterAndRankProviders } from "./matching";
 
 // ---------- Users / role profiles ----------
 
@@ -21,6 +22,7 @@ export async function createUserProfile(uid, { name, email, role, phone }) {
       phone: phone || "",
       serviceTypes: [],
       availabilityStatus: "available",
+      completedJobsCount: 0,
     });
   }
 }
@@ -35,14 +37,14 @@ export async function updateProviderProfile(uid, data) {
   await updateDoc(doc(db, "providers", uid), data);
 }
 
+// Returns providers ranked by match quality (see lib/matching.js), not just
+// a flat filter — exact service-type matches and more experienced providers
+// (by completed job count) surface first.
 export function watchAvailableProviders(breakdownType, cb) {
   const q = query(collection(db, "providers"), where("availabilityStatus", "==", "available"));
   return onSnapshot(q, (snap) => {
     const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    const filtered = breakdownType
-      ? all.filter((p) => !p.serviceTypes?.length || p.serviceTypes.includes(breakdownType))
-      : all;
-    cb(filtered);
+    cb(breakdownType ? filterAndRankProviders(all, breakdownType) : all);
   });
 }
 
@@ -76,6 +78,11 @@ export async function createBreakdownRequest(driverId, { breakdownType, descript
     createdAt: serverTimestamp(),
   });
   return ref.id;
+}
+
+// Add this export alias for consistency with ReportBreakdownForm:
+export async function createRequest(driverId, data) {
+  return createBreakdownRequest(driverId, data);
 }
 
 export async function assignProvider(requestId, providerId) {
@@ -189,8 +196,12 @@ export async function updateRequestStatus(requestId, actingProviderId, toStatus)
   if (toStatus === STATUS.COMPLETED) patch.completedAt = serverTimestamp();
   await updateDoc(reqRef, patch);
 
-  // Free the provider back up once the job is done.
+  // Free the provider back up once the job is done, and credit them with
+  // the completed job for future match-ranking (see lib/matching.js).
   if (toStatus === STATUS.COMPLETED) {
-    await updateDoc(doc(db, "providers", actingProviderId), { availabilityStatus: "available" });
+    await updateDoc(doc(db, "providers", actingProviderId), {
+      availabilityStatus: "available",
+      completedJobsCount: increment(1),
+    });
   }
 }
