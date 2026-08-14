@@ -1,50 +1,49 @@
-import {
-  collection, doc, addDoc, updateDoc, setDoc, getDocs, getDoc,
-  query, where, onSnapshot, serverTimestamp, runTransaction, increment,
+import { 
+  doc, setDoc, collection, query, where, onSnapshot, updateDoc, serverTimestamp,
+  addDoc, getDoc, getDocs, runTransaction, increment, writeBatch
 } from "firebase/firestore";
 import { db } from "../firebase";
-import {
-  STATUS, canCreateNewRequest, isValidTransition,
-} from "./businessRules";
+import { canCreateNewRequest, isValidTransition, STATUS } from "./businessRules";
 import { filterAndRankProviders } from "./matching";
 
 // ---------- Users / role profiles ----------
 
 export async function createUserProfile(uid, { name, email, role, phone }) {
-  await setDoc(doc(db, "users", uid), { name, email, role, createdAt: serverTimestamp() });
-  if (role === "driver") {
-    await setDoc(doc(db, "drivers", uid), { name, phone: phone || "" });
-  } else if (role === "provider") {
-    // name/phone denormalised onto the provider doc so the driver-facing
-    // provider list can be read directly without a second lookup per row.
-    await setDoc(doc(db, "providers", uid), {
-      name,
-      phone: phone || "",
-      serviceTypes: [],
+  await setDoc(doc(db, "users", uid), {
+    name,
+    email,
+    role,
+    phone: phone || null,
+    createdAt: serverTimestamp(),
+    ...(role === "provider" && {
       availabilityStatus: "available",
+      serviceTypes: [],
       completedJobsCount: 0,
-    });
-  }
+      averageRating: 0,
+    }),
+  });
 }
 
 export function watchProviderProfile(uid, cb) {
-  return onSnapshot(doc(db, "providers", uid), (snap) =>
-    cb(snap.exists() ? { id: snap.id, ...snap.data() } : null)
-  );
+  const ref = doc(db, "users", uid);
+  return onSnapshot(ref, (snap) => {
+    cb(snap.exists() ? snap.data() : null);
+  });
 }
 
 export async function updateProviderProfile(uid, data) {
-  await updateDoc(doc(db, "providers", uid), data);
+  await updateDoc(doc(db, "users", uid), data);
 }
 
-// Returns providers ranked by match quality (see lib/matching.js), not just
-// a flat filter — exact service-type matches and more experienced providers
-// (by completed job count) surface first.
 export function watchAvailableProviders(breakdownType, cb) {
-  const q = query(collection(db, "providers"), where("availabilityStatus", "==", "available"));
-  return onSnapshot(q, (snap) => {
-    const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    cb(breakdownType ? filterAndRankProviders(all, breakdownType) : all);
+  const ref = query(
+    collection(db, "users"),
+    where("role", "==", "provider"),
+    where("availabilityStatus", "==", "available")
+  );
+  return onSnapshot(ref, (snap) => {
+    const providers = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    cb(providers);
   });
 }
 
@@ -59,7 +58,7 @@ export function watchDriverRequests(driverId, cb) {
   });
 }
 
-export async function createBreakdownRequest(driverId, { breakdownType, description, location }) {
+export async function createBreakdownRequest(driverId, { breakdownType, location, details }) {
   // BR-01: enforce client-side (mirrored in firestore.rules)
   const existingSnap = await getDocs(
     query(collection(db, "breakdownRequests"), where("driverId", "==", driverId))
@@ -68,31 +67,72 @@ export async function createBreakdownRequest(driverId, { breakdownType, descript
   if (!canCreateNewRequest(existing)) {
     throw new Error("You already have an active breakdown request. Complete or cancel it before reporting a new one.");
   }
+
+  // Create the request in Reported status
   const ref = await addDoc(collection(db, "breakdownRequests"), {
     driverId,
     breakdownType,
-    description: description || "",
     location,
+    details: details || null,
     status: STATUS.REPORTED,
     assignedProviderId: null,
+    declinedProviderIds: [], // Track providers who declined
     createdAt: serverTimestamp(),
   });
+
+  // Trigger automatic matching via Cloud Function or immediate matching
+  await autoMatchProvider(ref.id, breakdownType, driverId);
+
   return ref.id;
 }
 
-// Add this export alias for consistency with ReportBreakdownForm:
-export async function createRequest(driverId, data) {
-  return createBreakdownRequest(driverId, data);
+export async function createRequest(data) {
+  return createBreakdownRequest(data.driverId, {
+    breakdownType: data.breakdownType,
+    location: data.location,
+    details: data.details,
+  });
+}
+
+async function autoMatchProvider(requestId, breakdownType, driverId) {
+  try {
+    // Fetch all available providers
+    const providersSnap = await getDocs(
+      query(
+        collection(db, "users"),
+        where("role", "==", "provider"),
+        where("availabilityStatus", "==", "available")
+      )
+    );
+    const providers = providersSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+    // Get the request to check declined list
+    const reqSnap = await getDoc(doc(db, "breakdownRequests", requestId));
+    const request = reqSnap.data();
+    const declinedIds = request.declinedProviderIds || [];
+
+    // Filter out declined providers and rank the rest
+    const available = providers.filter((p) => !declinedIds.includes(p.id));
+    const ranked = filterAndRankProviders(available, breakdownType);
+
+    if (ranked.length === 0) {
+      // No available providers left — request stays in Reported state
+      console.warn(`No available providers for request ${requestId}`);
+      return;
+    }
+
+    // Assign the top-ranked provider
+    const topProvider = ranked[0];
+    await assignProvider(requestId, topProvider.id);
+  } catch (err) {
+    console.error("Auto-match failed:", err);
+  }
 }
 
 export async function assignProvider(requestId, providerId) {
   const reqRef = doc(db, "breakdownRequests", requestId);
-  const providerRef = doc(db, "providers", providerId);
+  const userRef = doc(db, "users", providerId);
 
-  // Runs atomically: re-checks the request's status and the provider's own
-  // availability flag (not a cross-driver query — see firestore.rules note)
-  // so BR-02 is enforced without needing permission to read other drivers'
-  // requests.
   await runTransaction(db, async (tx) => {
     const reqSnap = await tx.get(reqRef);
     if (!reqSnap.exists()) throw new Error("Request not found.");
@@ -102,9 +142,9 @@ export async function assignProvider(requestId, providerId) {
       throw new Error(`Cannot assign a provider from status "${request.status}".`);
     }
 
-    const providerSnap = await tx.get(providerRef);
-    if (!providerSnap.exists()) throw new Error("Provider not found.");
-    const provider = providerSnap.data();
+    const userSnap = await tx.get(userRef);
+    if (!userSnap.exists()) throw new Error("Provider not found.");
+    const provider = userSnap.data();
 
     // BR-02: provider must not already be on an active request
     if (provider.availabilityStatus !== "available") {
@@ -116,14 +156,16 @@ export async function assignProvider(requestId, providerId) {
       status: STATUS.ASSIGNED,
       assignedAt: serverTimestamp(),
     });
-    tx.update(providerRef, { availabilityStatus: "busy" });
+    tx.update(userRef, { availabilityStatus: "busy" });
   });
 
+  // Log the assignment
   await addDoc(collection(db, "assignments"), {
     requestId,
     providerId,
     assignedAt: serverTimestamp(),
     acceptedAt: null,
+    declinedAt: null,
     completedAt: null,
   });
 }
@@ -135,14 +177,13 @@ export async function cancelRequest(requestId) {
   const request = reqSnap.data();
 
   if (!isValidTransition(request.status, STATUS.CANCELLED)) {
-    // covers BR-05 (cannot cancel once Accepted or later)
     throw new Error(`Cannot cancel a request that is already "${request.status}".`);
   }
   await updateDoc(reqRef, { status: STATUS.CANCELLED, cancelledAt: serverTimestamp() });
 
-  // Free up the provider if one had already been assigned (status was Assigned).
+  // Free up the provider if one had already been assigned
   if (request.assignedProviderId) {
-    await updateDoc(doc(db, "providers", request.assignedProviderId), { availabilityStatus: "available" });
+    await updateDoc(doc(db, "users", request.assignedProviderId), { availabilityStatus: "available" });
   }
 }
 
@@ -157,26 +198,56 @@ export function watchProviderAssignedRequests(providerId, cb) {
   });
 }
 
-export async function respondToAssignment(requestId, accept) {
+export async function respondToAssignment(requestId, providerId, accept) {
   const reqRef = doc(db, "breakdownRequests", requestId);
   const reqSnap = await getDoc(reqRef);
   if (!reqSnap.exists()) throw new Error("Request not found.");
   const request = reqSnap.data();
 
+  // BR-03: Only the assigned provider can respond
+  if (request.assignedProviderId !== providerId) {
+    throw new Error("Only the assigned provider can respond to this assignment.");
+  }
+
   if (accept) {
+    // Accept the job
     if (!isValidTransition(request.status, STATUS.ACCEPTED)) {
       throw new Error(`Cannot accept a request from status "${request.status}".`);
     }
     await updateDoc(reqRef, { status: STATUS.ACCEPTED, acceptedAt: serverTimestamp() });
+
+    // Log acceptance
+    const assignmentSnap = await getDocs(
+      query(collection(db, "assignments"), where("requestId", "==", requestId))
+    );
+    if (assignmentSnap.size > 0) {
+      await updateDoc(assignmentSnap.docs[0].ref, { acceptedAt: serverTimestamp() });
+    }
   } else {
-    // Reject: return the request to Reported, clear the assignment, and
-    // free the provider back up so the driver can pick another provider.
+    // Decline the job: add provider to declined list and reassign
+    const declinedIds = request.declinedProviderIds || [];
+    declinedIds.push(providerId);
+
     await updateDoc(reqRef, {
-      status: STATUS.REPORTED,
+      status: STATUS.REPORTED, // Back to reported
       assignedProviderId: null,
       assignedAt: null,
+      declinedProviderIds: declinedIds,
     });
-    await updateDoc(doc(db, "providers", request.assignedProviderId), { availabilityStatus: "available" });
+
+    // Free the provider
+    await updateDoc(doc(db, "users", providerId), { availabilityStatus: "available" });
+
+    // Log declination
+    const assignmentSnap = await getDocs(
+      query(collection(db, "assignments"), where("requestId", "==", requestId))
+    );
+    if (assignmentSnap.size > 0) {
+      await updateDoc(assignmentSnap.docs[0].ref, { declinedAt: serverTimestamp() });
+    }
+
+    // Automatically reassign to next best provider
+    await autoMatchProvider(requestId, request.breakdownType, request.driverId);
   }
 }
 
@@ -186,20 +257,21 @@ export async function updateRequestStatus(requestId, actingProviderId, toStatus)
   if (!reqSnap.exists()) throw new Error("Request not found.");
   const request = reqSnap.data();
 
+  // BR-04: Only the assigned provider can update
   if (request.assignedProviderId !== actingProviderId) {
-    throw new Error("Only the assigned provider can update this request."); // BR-04
+    throw new Error("Only the assigned provider can update this request.");
   }
   if (!isValidTransition(request.status, toStatus)) {
     throw new Error(`Cannot move from "${request.status}" to "${toStatus}".`);
   }
+
   const patch = { status: toStatus };
   if (toStatus === STATUS.COMPLETED) patch.completedAt = serverTimestamp();
   await updateDoc(reqRef, patch);
 
-  // Free the provider back up once the job is done, and credit them with
-  // the completed job for future match-ranking (see lib/matching.js).
+  // Free the provider back up once the job is done, and credit them
   if (toStatus === STATUS.COMPLETED) {
-    await updateDoc(doc(db, "providers", actingProviderId), {
+    await updateDoc(doc(db, "users", actingProviderId), {
       availabilityStatus: "available",
       completedJobsCount: increment(1),
     });

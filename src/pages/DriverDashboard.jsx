@@ -31,7 +31,7 @@ export default function DriverDashboard() {
         </div>
         <p className="text-trust-500 mb-6">
           {activeRequest
-            ? "Here's your active request. Select a provider below."
+            ? "We're finding the best provider for you."
             : "No active requests. Report a breakdown to get started."}
         </p>
 

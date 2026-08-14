@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { MapPin, Award, Users, Clock, AlertCircle } from "lucide-react";
+import { MapPin, Clock, AlertCircle, CheckCircle } from "lucide-react";
 import { assignProvider, cancelRequest } from "../lib/firestore";
 import { STATUS, ACTIVE_STATUSES } from "../lib/businessRules";
 import { useToast } from "../contexts/ToastContext";
@@ -50,14 +50,10 @@ export default function ActiveRequestPanel({ request }) {
     <div className="card p-6 space-y-6">
       {/* Header */}
       <div>
-        <div className="flex items-start justify-between mb-2">
-          <div>
-            <h2 className="text-xl font-bold text-trust-900">{request.breakdownType}</h2>
-            <p className="text-sm text-trust-500 flex items-center gap-1 mt-1">
-              <MapPin size={14} className="text-trust-300" /> {request.location}
-            </p>
-          </div>
-        </div>
+        <h2 className="text-xl font-bold text-trust-900">{request.breakdownType}</h2>
+        <p className="text-sm text-trust-500 flex items-center gap-1 mt-1">
+          <MapPin size={14} className="text-trust-300" /> {request.location}
+        </p>
         {request.details && (
           <p className="text-sm text-trust-600 mt-2 p-2 bg-trust-50 rounded">
             {request.details}
@@ -153,22 +149,37 @@ export default function ActiveRequestPanel({ request }) {
         <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-3">
           <Clock size={18} className="text-amber-600 mt-0.5 flex-shrink-0" />
           <div>
-            <p className="text-sm font-medium text-amber-900">Awaiting provider response</p>
+            <p className="text-sm font-medium text-amber-900">Provider responding</p>
             <p className="text-xs text-amber-800 mt-1">
-              {request.assignedProvider} has been notified and will respond shortly.
+              A qualified provider has been notified and will respond shortly.
             </p>
           </div>
         </div>
       )}
 
-      {/* In Progress / Completed */}
-      {ACTIVE_STATUSES.includes(request.status) && request.status !== STATUS.REPORTED && request.status !== STATUS.ASSIGNED && (
+      {request.status === STATUS.ACCEPTED && (
         <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg">
-          <p className="text-sm font-medium text-emerald-900">
-            {request.status === STATUS.ACCEPTED
-              ? "Provider is on the way"
-              : "Assistance in progress"}
-          </p>
+          <p className="text-sm font-medium text-emerald-900">Provider on the way</p>
+        </div>
+      )}
+
+      {request.status === STATUS.IN_PROGRESS && (
+        <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg">
+          <p className="text-sm font-medium text-emerald-900">Assistance in progress</p>
+        </div>
+      )}
+
+      {request.status === STATUS.COMPLETED && (
+        <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg flex items-start gap-2">
+          <CheckCircle size={16} className="text-emerald-700 flex-shrink-0 mt-0.5" />
+          <div className="text-xs text-emerald-900">
+            <p className="font-medium">Job completed</p>
+            {request.completedAt && (
+              <p className="text-emerald-800 mt-1">
+                {new Date(request.completedAt.seconds * 1000).toLocaleString()}
+              </p>
+            )}
+          </div>
         </div>
       )}
     </div>

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { MapPin, Award, Clock, CheckCircle, AlertCircle } from "lucide-react";
+import { MapPin, Clock, CheckCircle, AlertCircle } from "lucide-react";
 import { respondToAssignment, updateRequestStatus } from "../lib/firestore";
 import { STATUS } from "../lib/businessRules";
 import { useToast } from "../contexts/ToastContext";
@@ -12,10 +12,10 @@ export default function RequestCard({ request, providerId }) {
   async function respond(accept) {
     setBusy(true);
     try {
-      await respondToAssignment(request.id, accept);
-      toast.success(accept ? "Job accepted!" : "Job declined.");
+      await respondToAssignment(request.id, providerId, accept);
+      toast.addToast(accept ? "Job accepted!" : "Job declined. Next provider will be notified.", "success");
     } catch (err) {
-      toast.error(err.message);
+      toast.addToast(err.message, "error");
     } finally {
       setBusy(false);
     }
@@ -25,19 +25,16 @@ export default function RequestCard({ request, providerId }) {
     setBusy(true);
     try {
       await updateRequestStatus(request.id, providerId, toStatus);
-      toast.success(`Status updated to ${toStatus}.`);
+      toast.addToast(`Status updated to ${toStatus}.`, "success");
     } catch (err) {
-      toast.error(err.message);
+      toast.addToast(err.message, "error");
     } finally {
       setBusy(false);
     }
   }
 
-  const isProvider = !!providerId;
-
   return (
     <div className="card p-6 space-y-4">
-      {/* Header */}
       <div>
         <h3 className="text-lg font-bold text-trust-900">{request.breakdownType}</h3>
         <p className="text-sm text-trust-500 flex items-center gap-1 mt-1">
@@ -51,11 +48,10 @@ export default function RequestCard({ request, providerId }) {
         )}
       </div>
 
-      {/* Status Timeline */}
       <StatusTimeline status={request.status} />
 
-      {/* Provider Actions (if viewing as assigned provider) */}
-      {isProvider && request.status === STATUS.ASSIGNED && (
+      {/* Provider Actions */}
+      {providerId && request.status === STATUS.ASSIGNED && (
         <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
           <p className="text-xs font-medium text-blue-900 mb-3">Respond to assignment:</p>
           <div className="flex gap-2">
@@ -77,8 +73,7 @@ export default function RequestCard({ request, providerId }) {
         </div>
       )}
 
-      {/* Provider Progress Actions */}
-      {isProvider && request.status === STATUS.ACCEPTED && (
+      {providerId && request.status === STATUS.ACCEPTED && (
         <button
           onClick={() => advance(STATUS.IN_PROGRESS)}
           disabled={busy}
@@ -89,7 +84,7 @@ export default function RequestCard({ request, providerId }) {
         </button>
       )}
 
-      {isProvider && request.status === STATUS.IN_PROGRESS && (
+      {providerId && request.status === STATUS.IN_PROGRESS && (
         <button
           onClick={() => advance(STATUS.COMPLETED)}
           disabled={busy}
@@ -100,22 +95,13 @@ export default function RequestCard({ request, providerId }) {
         </button>
       )}
 
-      {/* Completed State */}
       {request.status === STATUS.COMPLETED && (
         <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg flex items-start gap-2">
           <CheckCircle size={16} className="text-emerald-700 flex-shrink-0 mt-0.5" />
-          <div className="text-xs text-emerald-900">
-            <p className="font-medium">Job completed</p>
-            {request.completedAt && (
-              <p className="text-emerald-800 mt-1">
-                {new Date(request.completedAt.seconds * 1000).toLocaleString()}
-              </p>
-            )}
-          </div>
+          <p className="text-xs text-emerald-900 font-medium">Job completed</p>
         </div>
       )}
 
-      {/* Cancelled State */}
       {request.status === STATUS.CANCELLED && (
         <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
           <AlertCircle size={16} className="text-red-700 flex-shrink-0 mt-0.5" />
