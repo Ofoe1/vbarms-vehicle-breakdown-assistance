@@ -7,6 +7,7 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import DriverDashboard from "./pages/DriverDashboard";
 import ProviderDashboard from "./pages/ProviderDashboard";
+import AdminDashboard from "./pages/AdminDashboard";
 import History from "./pages/History";
 
 function Home() {
@@ -14,6 +15,7 @@ function Home() {
   if (loading) return null;
   if (!firebaseUser) return <Landing />;
   if (!profile) return null;
+  if (profile.role === "admin") return <Navigate to="/admin" replace />;
   return <Navigate to={profile.role === "provider" ? "/provider" : "/driver"} replace />;
 }
 
@@ -57,6 +59,15 @@ export default function App() {
               element={
                 <ProtectedRoute role="provider">
                   <History />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/admin"
+              element={
+                <ProtectedRoute role="admin">
+                  <AdminDashboard />
                 </ProtectedRoute>
               }
             />
