@@ -6,67 +6,67 @@ service cloud.firestore {
     function isSignedIn() {
       return request.auth != null;
     }
+
     function isOwner(uid) {
-      return isSignedIn() && request.auth.uid == uid;
-    }
-    function role() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+      return request.auth.uid == uid;
     }
 
-    // users/{uid} — the profile is only readable/writable by its owner.
+    function getUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get("role", "");
+    }
+
+    function isAdmin() {
+      return isSignedIn() && getUserRole() == "admin";
+    }
+
+    function isDriver() {
+      return isSignedIn() && getUserRole() == "driver";
+    }
+
+    function isProvider() {
+      return isSignedIn() && getUserRole() == "provider";
+    }
+
+    // ===== USERS =====
     match /users/{uid} {
-      allow read: if isOwner(uid);
-      allow create: if isOwner(uid);
-      allow update: if isOwner(uid);
-    }
-
-    // drivers/{uid} — private to that driver.
-    match /drivers/{uid} {
+      // Owner can always read/write their own profile
       allow read, write: if isOwner(uid);
-    }
 
-    // providers/{uid} — profile is fully writable only by the provider
-    // themselves, but readable by any signed-in driver (needed to build
-    // the provider list). One narrow exception: any signed-in user may
-    // flip availabilityStatus alone — this lets the driver who is
-    // assigning/cancelling a request mark a provider busy/available
-    // without needing a dedicated backend (BR-02). Moving this into a
-    // Cloud Function instead of a client-writable field is a tracked
-    // technical debt item (see project documentation Section 12).
-    match /providers/{uid} {
+      // Anyone signed in can read user profiles (for matching)
       allow read: if isSignedIn();
-      allow write: if isOwner(uid);
-      allow update: if isSignedIn() &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['availabilityStatus']);
     }
 
-    // breakdownRequests/{id}
+    // ===== BREAKDOWN REQUESTS =====
     match /breakdownRequests/{requestId} {
-      allow read: if isSignedIn() && (
-        resource.data.driverId == request.auth.uid ||
-        resource.data.assignedProviderId == request.auth.uid
-      );
-      // Only a driver can create a request for themselves.
-      allow create: if isSignedIn() &&
-        request.resource.data.driverId == request.auth.uid &&
-        role() == "driver";
-      // Only the owning driver or the assigned provider may update it.
-      // Field-level business-rule enforcement (BR-01..05) is additionally
-      // applied on the client in src/lib/firestore.js; this rule is the
-      // authorisation backstop, not a full state-machine validator —
-      // moving full rule logic into Cloud Functions is a tracked technical
-      // debt item (see Section 12 of the project documentation).
-      allow update: if isSignedIn() && (
-        resource.data.driverId == request.auth.uid ||
-        resource.data.assignedProviderId == request.auth.uid ||
-        request.resource.data.assignedProviderId == request.auth.uid
-      );
+      // Driver can CRUD their own requests
+      allow read, create: if isSignedIn() && 
+                             request.resource.data.driverId == request.auth.uid;
+      
+      allow read, update: if isSignedIn() && 
+                             resource.data.driverId == request.auth.uid;
+
+      // Provider can read and update their assigned requests
+      allow read: if isSignedIn() && 
+                     resource.data.assignedProviderId == request.auth.uid;
+      
+      allow update: if isSignedIn() && 
+                       resource.data.assignedProviderId == request.auth.uid;
+
+      // Admins can read all requests
+      allow read: if isAdmin();
     }
 
-    // assignments/{id} — readable/writable by the driver or provider involved.
+    // ===== ASSIGNMENTS LOG =====
     match /assignments/{assignmentId} {
-      allow read, create: if isSignedIn();
-      allow update: if isSignedIn() && resource.data.providerId == request.auth.uid;
+      // Provider can read their own assignments
+      allow read: if isSignedIn() && 
+                     resource.data.providerId == request.auth.uid;
+
+      // Anyone can write (system operations)
+      allow write: if isSignedIn();
+
+      // Admins can read all assignments
+      allow read: if isAdmin();
     }
   }
 }

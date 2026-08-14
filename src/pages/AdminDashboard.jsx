@@ -13,9 +13,9 @@ export default function AdminDashboard() {
   useEffect(() => {
     async function fetchStats() {
       try {
-        // Count active requests
-        const requestsSnap = await getDocs(collection(db, "requests"));
-        const requests = requestsSnap.docs.map((d) => ({ ...d.data() }));
+        // Count active requests — use correct collection name
+        const requestsSnap = await getDocs(collection(db, "breakdownRequests"));
+        const requests = requestsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
         // Count drivers
         const driversSnap = await getDocs(
@@ -35,14 +35,17 @@ export default function AdminDashboard() {
         const cancelledCount = requests.filter((r) => r.status === "Cancelled").length;
 
         // Average completion time (if timestamps exist)
-        const completedRequests = requests.filter((r) => r.status === "Completed" && r.createdAt && r.completedAt);
-        const avgTimeMs = completedRequests.length > 0
-          ? completedRequests.reduce((sum, r) => {
-              const created = r.createdAt.seconds || 0;
-              const completed = r.completedAt.seconds || 0;
-              return sum + (completed - created);
-            }, 0) / completedRequests.length
-          : 0;
+        const completedRequests = requests.filter(
+          (r) => r.status === "Completed" && r.createdAt && r.completedAt
+        );
+        const avgTimeMs =
+          completedRequests.length > 0
+            ? completedRequests.reduce((sum, r) => {
+                const created = r.createdAt.seconds || 0;
+                const completed = r.completedAt.seconds || 0;
+                return sum + (completed - created);
+              }, 0) / completedRequests.length
+            : 0;
         const avgTimeHours = (avgTimeMs / 3600).toFixed(1);
 
         setStats({
@@ -53,12 +56,14 @@ export default function AdminDashboard() {
           totalDrivers: driversSnap.size,
           totalProviders: providersSnap.size,
           avgCompletionHours: avgTimeHours,
-          successRate: completedCount > 0
-            ? ((completedCount / (completedCount + cancelledCount)) * 100).toFixed(1)
-            : "N/A",
+          successRate:
+            completedCount > 0
+              ? ((completedCount / (completedCount + cancelledCount)) * 100).toFixed(1)
+              : "N/A",
         });
         setLoading(false);
       } catch (err) {
+        console.error("Admin stats error:", err);
         setError(err.message);
         setLoading(false);
       }
@@ -72,7 +77,9 @@ export default function AdminDashboard() {
       <NavBar />
       <main className="max-w-6xl mx-auto px-4 py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-display font-bold text-trust-900">Admin Dashboard</h1>
+          <h1 className="text-3xl font-display font-bold text-trust-900">
+            Admin Dashboard
+          </h1>
           <p className="text-trust-500 mt-1">System overview and metrics</p>
         </div>
 
@@ -88,7 +95,7 @@ export default function AdminDashboard() {
               </div>
             </div>
           </div>
-        ) : (
+        ) : stats ? (
           <>
             {/* Key Metrics */}
             <div className="grid md:grid-cols-3 gap-6 mb-8">
@@ -142,7 +149,9 @@ export default function AdminDashboard() {
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-trust-600">Providers</span>
-                    <span className="font-semibold text-trust-900">{stats.totalProviders}</span>
+                    <span className="font-semibold text-trust-900">
+                      {stats.totalProviders}
+                    </span>
                   </div>
                   <div className="border-t border-trust-200 pt-3 flex items-center justify-between">
                     <span className="text-trust-600 font-medium">Total Users</span>
@@ -160,15 +169,21 @@ export default function AdminDashboard() {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-trust-600">Total Requests</span>
-                    <span className="font-semibold text-trust-900">{stats.totalRequests}</span>
+                    <span className="font-semibold text-trust-900">
+                      {stats.totalRequests}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-trust-600">Cancelled</span>
-                    <span className="font-semibold text-red-600">{stats.cancelledRequests}</span>
+                    <span className="font-semibold text-red-600">
+                      {stats.cancelledRequests}
+                    </span>
                   </div>
                   <div className="border-t border-trust-200 pt-3 flex items-center justify-between">
                     <span className="text-trust-600 font-medium">Avg Completion Time</span>
-                    <span className="font-semibold text-trust-900">{stats.avgCompletionHours}h</span>
+                    <span className="font-semibold text-trust-900">
+                      {stats.avgCompletionHours}h
+                    </span>
                   </div>
                 </div>
               </div>
@@ -181,13 +196,14 @@ export default function AdminDashboard() {
                 <div className="text-sm text-blue-900">
                   <p className="font-medium">Real-time metrics</p>
                   <p className="mt-1">
-                    Stats refresh on page load. For live updates, integrate Firebase Realtime Database or Cloud Functions.
+                    Stats refresh on page load. For live updates, integrate Firebase
+                    Realtime Database or Cloud Functions.
                   </p>
                 </div>
               </div>
             </div>
           </>
-        )}
+        ) : null}
       </main>
     </div>
   );
