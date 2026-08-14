@@ -10,6 +10,8 @@ export default function DriverDashboard() {
   const { profile } = useAuth();
   const { requests, loading } = useDriverRequests(profile?.id);
 
+  if (loading) return <DashboardSkeleton />;
+
   const activeRequest = requests.find((r) => ACTIVE_STATUSES.includes(r.status));
   const completedCount = requests.filter((r) => r.status === STATUS.COMPLETED).length;
 
@@ -33,16 +35,10 @@ export default function DriverDashboard() {
             : "No active requests. Report a breakdown to get started."}
         </p>
 
-        {loading ? (
-          <DashboardSkeleton />
+        {activeRequest ? (
+          <ActiveRequestPanel request={activeRequest} />
         ) : (
-          <div className="space-y-6">
-            {activeRequest ? (
-              <ActiveRequestPanel request={activeRequest} />
-            ) : (
-              <ReportBreakdownForm driverId={profile?.id} />
-            )}
-          </div>
+          <ReportBreakdownForm driverId={profile?.id} />
         )}
       </main>
     </div>
