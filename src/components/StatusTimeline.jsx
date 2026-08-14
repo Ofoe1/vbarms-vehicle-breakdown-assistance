@@ -2,7 +2,7 @@ import { CheckCircle, Circle, AlertCircle } from "lucide-react";
 import { STATUS } from "../lib/businessRules";
 
 const STEPS = [STATUS.REPORTED, STATUS.ASSIGNED, STATUS.ACCEPTED, STATUS.IN_PROGRESS, STATUS.COMPLETED];
-const STEP_LABELS = ["Reported", "Assigned", "Accepted", "In progress", "Completed"];
+const STEP_LABELS = ["Reported", "Assigned", "Accepted", "In Progress", "Completed"];
 
 export default function StatusTimeline({ status }) {
   if (status === STATUS.CANCELLED) {
@@ -25,7 +25,6 @@ export default function StatusTimeline({ status }) {
 
           return (
             <div key={step} className="flex items-center flex-1">
-              {/* Icon */}
               <div className="flex-shrink-0">
                 {done ? (
                   <CheckCircle
@@ -37,7 +36,6 @@ export default function StatusTimeline({ status }) {
                 )}
               </div>
 
-              {/* Line to next step */}
               {!isLast && (
                 <div
                   className={`flex-1 h-1 mx-1 ${
@@ -50,7 +48,6 @@ export default function StatusTimeline({ status }) {
         })}
       </div>
 
-      {/* Labels */}
       <div className="flex justify-between mt-2 text-xs text-trust-500 font-medium">
         {STEP_LABELS.map((label, i) => (
           <span

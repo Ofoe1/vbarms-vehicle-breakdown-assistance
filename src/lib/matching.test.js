@@ -1,52 +1,42 @@
 import { describe, it, expect } from "vitest";
-import { computeProviderScore, filterAndRankProviders } from "./matching";
+import {
+  filterProvidersByServiceType,
+  filterAndRankProviders,
+} from "./matching";
 
-describe("computeProviderScore", () => {
-  it("scores an exact service-type match higher than a generalist", () => {
-    const specialist = { serviceTypes: ["Flat tyre"], completedJobsCount: 0 };
-    const generalist = { serviceTypes: [], completedJobsCount: 0 };
-    expect(computeProviderScore(specialist, "Flat tyre")).toBeGreaterThan(
-      computeProviderScore(generalist, "Flat tyre")
-    );
+describe("filterProvidersByServiceType", () => {
+  const providers = [
+    { id: "a", serviceType: "Flat tyre", availabilityStatus: "available" },
+    { id: "b", serviceType: "Flat tyre", availabilityStatus: "busy" },
+    { id: "c", serviceType: "Battery failure", availabilityStatus: "available" },
+    { id: "d", serviceType: null, availabilityStatus: "available" },
+  ];
+
+  it("returns only providers offering the exact service type and available", () => {
+    const result = filterProvidersByServiceType(providers, "Flat tyre");
+    expect(result.map((p) => p.id)).toEqual(["a"]);
   });
 
-  it("returns null for a provider who doesn't offer the type and isn't a generalist", () => {
-    const irrelevant = { serviceTypes: ["Battery failure"], completedJobsCount: 5 };
-    expect(computeProviderScore(irrelevant, "Flat tyre")).toBeNull();
+  it("excludes unavailable providers even if the type matches", () => {
+    const result = filterProvidersByServiceType(providers, "Flat tyre");
+    expect(result.find((p) => p.id === "b")).toBeUndefined();
   });
 
-  it("rewards experience, but caps the bonus at 20 completed jobs", () => {
-    const veteran = { serviceTypes: ["Flat tyre"], completedJobsCount: 20 };
-    const legend = { serviceTypes: ["Flat tyre"], completedJobsCount: 500 };
-    expect(computeProviderScore(veteran, "Flat tyre")).toBe(
-      computeProviderScore(legend, "Flat tyre")
-    );
-  });
-
-  it("an experienced generalist can still outrank a brand-new specialist", () => {
-    const newSpecialist = { serviceTypes: ["Flat tyre"], completedJobsCount: 0 }; // 100
-    const veteranGeneralist = { serviceTypes: [], completedJobsCount: 20 }; // 40 + 40 = 80
-    expect(computeProviderScore(newSpecialist, "Flat tyre")).toBeGreaterThan(
-      computeProviderScore(veteranGeneralist, "Flat tyre")
-    );
+  it("returns the full list when no serviceType is requested", () => {
+    const result = filterProvidersByServiceType(providers, null);
+    expect(result.length).toBe(providers.length);
   });
 });
 
 describe("filterAndRankProviders", () => {
   const providers = [
-    { id: "a", serviceTypes: ["Battery failure"], completedJobsCount: 10 }, // no match
-    { id: "b", serviceTypes: ["Flat tyre"], completedJobsCount: 2 },        // 100 + 4 = 104
-    { id: "c", serviceTypes: [], completedJobsCount: 10 },                 // 40 + 20 = 60
-    { id: "d", serviceTypes: ["Flat tyre"], completedJobsCount: 15 },      // 100 + 30 = 130
+    { id: "a", serviceType: "Flat tyre", availabilityStatus: "available", completedJobsCount: 2 },
+    { id: "b", serviceType: "Flat tyre", availabilityStatus: "available", completedJobsCount: 15 },
+    { id: "c", serviceType: "Battery failure", availabilityStatus: "available", completedJobsCount: 10 },
   ];
 
-  it("excludes non-matching providers entirely", () => {
+  it("filters by service type and sorts by experience descending", () => {
     const result = filterAndRankProviders(providers, "Flat tyre");
-    expect(result.find((p) => p.id === "a")).toBeUndefined();
-  });
-
-  it("ranks by score descending", () => {
-    const result = filterAndRankProviders(providers, "Flat tyre");
-    expect(result.map((p) => p.id)).toEqual(["d", "b", "c"]);
+    expect(result.map((p) => p.id)).toEqual(["b", "a"]);
   });
 });

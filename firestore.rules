@@ -7,16 +7,8 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function isOwner(uid) {
-      return request.auth.uid == uid;
-    }
-
     function getUserRole() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get("role", "");
-    }
-
-    function isAdmin() {
-      return isSignedIn() && getUserRole() == "admin";
     }
 
     function isDriver() {
@@ -27,46 +19,41 @@ service cloud.firestore {
       return isSignedIn() && getUserRole() == "provider";
     }
 
-    // ===== USERS =====
     match /users/{uid} {
-      // Owner can always read/write their own profile
-      allow read, write: if isOwner(uid);
+      allow read, write: if isSignedIn() && request.auth.uid == uid;
+    }
 
-      // Anyone signed in can read user profiles (for matching)
+    match /drivers/{uid} {
+      allow read, write: if isSignedIn() && request.auth.uid == uid;
+    }
+
+    match /providers/{uid} {
+      allow write: if isSignedIn() && request.auth.uid == uid;
+
       allow read: if isSignedIn();
+
+      allow update: if isSignedIn() &&
+        (request.auth.uid == uid ||
+         request.resource.data.diff(resource.data).affectedKeys()
+           .hasOnly(["availabilityStatus"]));
     }
 
-    // ===== BREAKDOWN REQUESTS =====
     match /breakdownRequests/{requestId} {
-      // Driver can CRUD their own requests
-      allow read, create: if isSignedIn() && 
-                             request.resource.data.driverId == request.auth.uid;
-      
-      allow read, update: if isSignedIn() && 
-                             resource.data.driverId == request.auth.uid;
+      allow read, create: if isSignedIn() &&
+        request.resource.data.driverId == request.auth.uid;
 
-      // Provider can read and update their assigned requests
-      allow read: if isSignedIn() && 
-                     resource.data.assignedProviderId == request.auth.uid;
-      
-      allow update: if isSignedIn() && 
-                       resource.data.assignedProviderId == request.auth.uid;
+      allow update: if isSignedIn() &&
+        resource.data.driverId == request.auth.uid;
 
-      // Admins can read all requests
-      allow read: if isAdmin();
+      allow read, update: if isSignedIn() &&
+        resource.data.assignedProviderId == request.auth.uid;
     }
 
-    // ===== ASSIGNMENTS LOG =====
     match /assignments/{assignmentId} {
-      // Provider can read their own assignments
-      allow read: if isSignedIn() && 
-                     resource.data.providerId == request.auth.uid;
+      allow read: if isSignedIn() &&
+        resource.data.providerId == request.auth.uid;
 
-      // Anyone can write (system operations)
       allow write: if isSignedIn();
-
-      // Admins can read all assignments
-      allow read: if isAdmin();
     }
   }
 }

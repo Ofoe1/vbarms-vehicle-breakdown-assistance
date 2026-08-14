@@ -1,17 +1,15 @@
 import { useState } from "react";
-import { MapPin, Clock, AlertCircle, CheckCircle } from "lucide-react";
+import { MapPin, Clock, AlertCircle, CheckCircle, Users, Award } from "lucide-react";
 import { assignProvider, cancelRequest } from "../lib/firestore";
-import { STATUS, ACTIVE_STATUSES } from "../lib/businessRules";
+import { STATUS } from "../lib/businessRules";
 import { useToast } from "../contexts/ToastContext";
 import { useAvailableProviders } from "../hooks/useFirestoreData";
 import { filterAndRankProviders, matchLabel } from "../lib/matching";
 import StatusTimeline from "./StatusTimeline";
 
-export default function ActiveRequestPanel({ request }) {
+export default function ActiveRequestPanel({ request, driverId }) {
   const toast = useToast();
-  const { providers } = useAvailableProviders(
-    request.status === STATUS.REPORTED ? request.breakdownType : null
-  );
+  const { providers } = useAvailableProviders();
   const [selected, setSelected] = useState(null);
   const [busy, setBusy] = useState(false);
 
@@ -37,7 +35,7 @@ export default function ActiveRequestPanel({ request }) {
   async function handleCancel() {
     setBusy(true);
     try {
-      await cancelRequest(request.id);
+      await cancelRequest(request.id, driverId);
       toast.success("Request cancelled.");
     } catch (err) {
       toast.error(err.message);
@@ -48,23 +46,20 @@ export default function ActiveRequestPanel({ request }) {
 
   return (
     <div className="card p-6 space-y-6">
-      {/* Header */}
       <div>
         <h2 className="text-xl font-bold text-trust-900">{request.breakdownType}</h2>
         <p className="text-sm text-trust-500 flex items-center gap-1 mt-1">
           <MapPin size={14} className="text-trust-300" /> {request.location}
         </p>
-        {request.details && (
+        {request.description && (
           <p className="text-sm text-trust-600 mt-2 p-2 bg-trust-50 rounded">
-            {request.details}
+            {request.description}
           </p>
         )}
       </div>
 
-      {/* Status Timeline */}
       <StatusTimeline status={request.status} />
 
-      {/* Provider Selection */}
       {request.status === STATUS.REPORTED && ranked.length > 0 && (
         <div className="space-y-3">
           <h3 className="font-semibold text-trust-900 flex items-center gap-2">
@@ -107,9 +102,9 @@ export default function ActiveRequestPanel({ request }) {
                   <p className="text-xs text-trust-500 flex items-center gap-1 mt-1">
                     <Award size={12} /> {provider.completedJobsCount || 0} completed jobs
                   </p>
-                  {provider.serviceTypes && provider.serviceTypes.length > 0 && (
+                  {provider.serviceType && (
                     <p className="text-xs text-trust-400 mt-1">
-                      Specializes in: {provider.serviceTypes.join(", ")}
+                      Specialises in: {provider.serviceType}
                     </p>
                   )}
                 </div>
@@ -131,20 +126,18 @@ export default function ActiveRequestPanel({ request }) {
         </div>
       )}
 
-      {/* No Providers Message */}
       {request.status === STATUS.REPORTED && ranked.length === 0 && (
         <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-3">
           <AlertCircle size={18} className="text-blue-600 mt-0.5 flex-shrink-0" />
           <div>
             <p className="text-sm font-medium text-blue-900">No available providers</p>
             <p className="text-xs text-blue-800 mt-1">
-              We're searching for providers who specialize in {request.breakdownType}. Please wait…
+              We're searching for providers who specialise in {request.breakdownType}. Please wait…
             </p>
           </div>
         </div>
       )}
 
-      {/* Awaiting Response */}
       {request.status === STATUS.ASSIGNED && (
         <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-3">
           <Clock size={18} className="text-amber-600 mt-0.5 flex-shrink-0" />

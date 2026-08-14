@@ -8,7 +8,7 @@ export default function ReportBreakdownForm({ driverId }) {
   const toast = useToast();
   const [type, setType] = useState("");
   const [location, setLocation] = useState("");
-  const [details, setDetails] = useState("");
+  const [description, setDescription] = useState("");
   const [busy, setBusy] = useState(false);
 
   async function handleSubmit(e) {
@@ -24,13 +24,12 @@ export default function ReportBreakdownForm({ driverId }) {
         driverId,
         breakdownType: type,
         location,
-        details: details || null,
-        status: "Reported",
+        description: description || null,
       });
-      toast.addToast("Breakdown reported. Waiting for provider match…", "success");
+      toast.addToast("Breakdown reported. Select a provider to assign…", "success");
       setType("");
       setLocation("");
-      setDetails("");
+      setDescription("");
     } catch (err) {
       toast.addToast(err.message, "error");
     } finally {
@@ -43,7 +42,7 @@ export default function ReportBreakdownForm({ driverId }) {
       <div className="flex items-center gap-2 mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
         <AlertCircle size={18} className="text-blue-600 flex-shrink-0" />
         <p className="text-sm text-blue-900">
-          Describe your breakdown. We'll match you with the most qualified provider.
+          Describe your breakdown. Available providers matching your breakdown type will be listed for you to assign.
         </p>
       </div>
 
@@ -85,8 +84,8 @@ export default function ReportBreakdownForm({ driverId }) {
           <FileText size={16} className="text-trust-400" /> Additional details
         </label>
         <textarea
-          value={details}
-          onChange={(e) => setDetails(e.target.value)}
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
           placeholder="Any extra info (e.g. car make/model, strange noises)?"
           disabled={busy}
           rows={3}

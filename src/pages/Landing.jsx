@@ -6,7 +6,6 @@ export default function Landing() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-trust-900 via-trust-800 to-trust-900 text-white">
-      {/* Header */}
       <header className="border-b border-trust-700 bg-trust-900/80 backdrop-blur">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -30,7 +29,6 @@ export default function Landing() {
         </div>
       </header>
 
-      {/* Hero */}
       <section className="max-w-6xl mx-auto px-6 py-20 text-center">
         <h1 className="text-5xl font-bold font-heading mb-4 text-amber-300">
           Roadside Assistance, Matched Right
@@ -55,74 +53,72 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* Features */}
       <section className="max-w-6xl mx-auto px-6 py-16">
         <h2 className="text-3xl font-bold font-heading text-center mb-12">Why VBARMS?</h2>
         <div className="grid md:grid-cols-3 gap-8">
           <div className="bg-trust-800/50 border border-trust-700 p-8 rounded-xl">
             <Zap className="w-10 h-10 text-amber-400 mb-4" />
-            <h3 className="text-xl font-bold font-heading mb-2">Smart Matching</h3>
+            <h3 className="text-xl font-bold font-heading mb-2">Structured Breakdown Reporting</h3>
             <p className="text-trust-200">
-              Our algorithm ranks providers by specialization and experience, ensuring you get the best fit.
-            </p>
-          </div>
-          <div className="bg-trust-800/50 border border-trust-700 p-8 rounded-xl">
-            <Clock className="w-10 h-10 text-amber-400 mb-4" />
-            <h3 className="text-xl font-bold font-heading mb-2">Quick Response</h3>
-            <p className="text-trust-200">
-              Available providers are notified instantly. Average response time under 5 minutes.
+              Report your breakdown with its type and location, and immediately see providers who offer the matching service.
             </p>
           </div>
           <div className="bg-trust-800/50 border border-trust-700 p-8 rounded-xl">
             <Users className="w-10 h-10 text-amber-400 mb-4" />
-            <h3 className="text-xl font-bold font-heading mb-2">Trusted Network</h3>
+            <h3 className="text-xl font-bold font-heading mb-2">Choose Your Provider</h3>
             <p className="text-trust-200">
-              All providers are verified professionals with proven track records and customer reviews.
+              Review the available providers ranked by experience, then assign the one you trust to help.
+            </p>
+          </div>
+          <div className="bg-trust-800/50 border border-trust-700 p-8 rounded-xl">
+            <Clock className="w-10 h-10 text-amber-400 mb-4" />
+            <h3 className="text-xl font-bold font-heading mb-2">Live Status Tracking</h3>
+            <p className="text-trust-200">
+              Follow your request through a clear state workflow — Reported → Assigned → Accepted → In Progress → Completed.
             </p>
           </div>
         </div>
 
         <div className="grid md:grid-cols-2 gap-8 mt-12">
           <div className="bg-trust-800/50 border border-trust-700 p-8 rounded-xl">
-            <Users className="w-10 h-10 text-amber-400 mb-4" />
+            <MapPin className="w-10 h-10 text-amber-400 mb-4" />
             <h3 className="text-xl font-bold font-heading mb-4">For Drivers</h3>
             <ul className="space-y-2 text-trust-200">
               <li className="flex items-center gap-2">
                 <MapPin size={16} className="text-amber-400" />
-                Report breakdowns instantly
+                Report breakdowns with type and text location
               </li>
               <li className="flex items-center gap-2">
-                <Award size={16} className="text-amber-400" />
-                Track provider expertise
+                <Users size={16} className="text-amber-400" />
+                Pick from providers filtered by service type
               </li>
               <li className="flex items-center gap-2">
                 <Clock size={16} className="text-amber-400" />
-                See real-time status updates
+                Track the request through its live status workflow
               </li>
             </ul>
           </div>
           <div className="bg-trust-800/50 border border-trust-700 p-8 rounded-xl">
-            <Shield className="w-10 h-10 text-amber-400 mb-4" />
+            <Award className="w-10 h-10 text-amber-400 mb-4" />
             <h3 className="text-xl font-bold font-heading mb-4">For Providers</h3>
             <ul className="space-y-2 text-trust-200">
               <li className="flex items-center gap-2">
                 <Zap size={16} className="text-amber-400" />
-                Gain qualified job requests
+                Receive assigned assistance requests
               </li>
               <li className="flex items-center gap-2">
-                <Award size={16} className="text-amber-400" />
-                Build your reputation
+                <Shield size={16} className="text-amber-400" />
+                Accept or reject each assignment
               </li>
               <li className="flex items-center gap-2">
                 <Clock size={16} className="text-amber-400" />
-                Manage your workload
+                Manage your availability and service history
               </li>
             </ul>
           </div>
         </div>
       </section>
 
-      {/* Footer */}
       <footer className="border-t border-trust-700 bg-trust-900/50 mt-20">
         <div className="max-w-6xl mx-auto px-6 py-8 text-center text-trust-400">
           <p>&copy; 2024 VBARMS. All rights reserved.</p>

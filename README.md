@@ -1,26 +1,41 @@
 # VBARMS — Vehicle Breakdown Assistance and Response Management System
 
 React + Firebase implementation for the CSCD602 individual project exam.
+The codebase is aligned to the consolidated project documentation (CSCD602
+exam submission).
 
-## What's implemented (Must-have scope)
+## What's implemented (Must-have scope, per the documentation)
 
-- Driver & Provider registration/login (Firebase Auth)
-- Report breakdown (type + text location), one active request per driver (BR-01)
-- Driver views available providers filtered by breakdown type, assigns one
+- Driver & Provider registration/login (Firebase Auth, **email/password only**)
+- Report breakdown (type + text location + description), one active request
+  per driver (BR-01)
+- Driver views providers filtered by service type and chooses one to assign
+  (FR-05 / FR-06)
 - Provider unavailable-while-active-job rule enforced on assignment (BR-02)
-- Full status workflow: Reported → Assigned → Accepted → In Progress → Completed,
-  plus Cancelled — with transition validation (BR-03)
-- Provider accept/reject, status updates, "only assigned provider can complete" (BR-04)
-- Driver cancel, only before Accepted (BR-05)
-- History view for both roles
-- Firestore security rules for role/ownership-scoped access
+- Full status workflow: Reported → Assigned → Accepted → In Progress →
+  Completed, plus Cancelled — with transition validation
+- Provider accept/reject (FR-08), status updates (FR-09), "only assigned
+  provider can complete" (BR-04)
+- Driver cancel, only before Accepted (BR-05 / FR-11)
+- History view for both roles (FR-12)
+- Firestore security rules for owner/role-scoped access
 - Responsive UI (Tailwind), input validation, error handling throughout
 
-**Not implemented (documented technical debt / future evolution — see the project
-documentation's Section 12 and 16):** Admin/Dispatcher role, GPS/maps, automated
-provider matching, push/SMS notifications, ratings, payments, dedicated backend
-server (rule enforcement currently lives in client code + Firestore rules, not
-Cloud Functions).
+**Not implemented (documented technical debt / future evolution — see the
+project documentation Sections 12 and 16):** Admin/Dispatcher role, GPS/maps,
+automated provider matching, push/SMS notifications, ratings, payments,
+dedicated backend server (rule enforcement currently lives in client code +
+Firestore rules, not Cloud Functions).
+
+## Data model (Firestore collections — documentation Section 9.3)
+
+```
+users               { name, email, role }                    (role: driver | provider)
+drivers             { userId, phone }
+providers           { userId, phone, serviceType, availabilityStatus }
+breakdownRequests   { driverId, breakdownType, description, location, status, createdAt }
+assignments         { requestId, providerId, assignedAt, acceptedAt, completedAt }
+```
 
 ## Local setup
 
@@ -48,6 +63,7 @@ Cloud Functions).
 npm install -g vercel
 vercel
 ```
+
 ## Project structure
 
 ```
@@ -56,6 +72,7 @@ src/
   lib/businessRules.js     Pure functions for BR-01..05 and status transitions
   lib/firestore.js         All Firestore reads/writes (single source of truth
                             for how business rules are applied to data)
+  lib/matching.js          FR-05 provider filtering by serviceType + ranking
   contexts/AuthContext.jsx Current user + role, available app-wide
   components/              Shared UI: NavBar, StatusTimeline, forms, cards
   pages/                   Login, Register, DriverDashboard, ProviderDashboard,

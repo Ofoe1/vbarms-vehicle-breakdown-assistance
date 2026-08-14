@@ -55,18 +55,18 @@ export function useProviderProfile(providerId) {
   return { profile, loading };
 }
 
-export function useAvailableProviders(breakdownType) {
+export function useAvailableProviders() {
   const [providers, setProviders] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     setLoading(true);
-    const unsub = watchAvailableProviders(breakdownType, (list) => {
+    const unsub = watchAvailableProviders((list) => {
       setProviders(list);
       setLoading(false);
     });
     return unsub;
-  }, [breakdownType]);
+  }, []);
 
   return { providers, loading };
 }
