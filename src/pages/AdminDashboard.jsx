@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { BarChart3, Users, TrendingUp, AlertCircle, Zap } from "lucide-react";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { BarChart3, Users, TrendingUp, AlertCircle, Zap, RefreshCw } from "lucide-react";
+import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "../firebase";
 import NavBar from "../components/NavBar";
 import DashboardSkeleton from "../components/DashboardSkeleton";
@@ -9,66 +9,75 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [lastUpdated, setLastUpdated] = useState(null);
+
+  async function fetchStats() {
+    setLoading(true);
+    try {
+      // Fetch all requests
+      const requestsSnap = await getDocs(collection(db, "breakdownRequests"));
+      const requests = requestsSnap.docs.map((d) => d.data());
+
+      // Fetch all drivers
+      const driversSnap = await getDocs(
+        query(collection(db, "users"), where("role", "==", "driver"))
+      );
+
+      // Fetch all providers
+      const providersSnap = await getDocs(
+        query(collection(db, "users"), where("role", "==", "provider"))
+      );
+
+      // Calculate stats
+      const activeCount = requests.filter((r) =>
+        ["Reported", "Assigned", "Accepted", "In progress"].includes(r.status)
+      ).length;
+
+      const completedCount = requests.filter((r) => r.status === "Completed").length;
+      const cancelledCount = requests.filter((r) => r.status === "Cancelled").length;
+
+      // Average completion time
+      const completedRequests = requests.filter(
+        (r) => r.status === "Completed" && r.createdAt && r.completedAt
+      );
+
+      const avgTimeSeconds =
+        completedRequests.length > 0
+          ? completedRequests.reduce((sum, r) => {
+              const created = r.createdAt.seconds || 0;
+              const completed = r.completedAt.seconds || 0;
+              return sum + (completed - created);
+            }, 0) / completedRequests.length
+          : 0;
+
+      const avgTimeHours = (avgTimeSeconds / 3600).toFixed(1);
+
+      const successRate =
+        completedCount > 0
+          ? ((completedCount / (completedCount + cancelledCount)) * 100).toFixed(1)
+          : "N/A";
+
+      setStats({
+        totalRequests: requests.length,
+        activeRequests: activeCount,
+        completedRequests: completedCount,
+        cancelledRequests: cancelledCount,
+        totalDrivers: driversSnap.size,
+        totalProviders: providersSnap.size,
+        avgCompletionHours: avgTimeHours,
+        successRate: successRate,
+      });
+      setLastUpdated(new Date());
+      setError(null);
+    } catch (err) {
+      console.error("Admin stats error:", err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    async function fetchStats() {
-      try {
-        // Count active requests — use correct collection name
-        const requestsSnap = await getDocs(collection(db, "breakdownRequests"));
-        const requests = requestsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-
-        // Count drivers
-        const driversSnap = await getDocs(
-          query(collection(db, "users"), where("role", "==", "driver"))
-        );
-
-        // Count providers
-        const providersSnap = await getDocs(
-          query(collection(db, "users"), where("role", "==", "provider"))
-        );
-
-        // Calculate request stats
-        const activeCount = requests.filter((r) =>
-          ["Reported", "Assigned", "Accepted", "In progress"].includes(r.status)
-        ).length;
-        const completedCount = requests.filter((r) => r.status === "Completed").length;
-        const cancelledCount = requests.filter((r) => r.status === "Cancelled").length;
-
-        // Average completion time (if timestamps exist)
-        const completedRequests = requests.filter(
-          (r) => r.status === "Completed" && r.createdAt && r.completedAt
-        );
-        const avgTimeMs =
-          completedRequests.length > 0
-            ? completedRequests.reduce((sum, r) => {
-                const created = r.createdAt.seconds || 0;
-                const completed = r.completedAt.seconds || 0;
-                return sum + (completed - created);
-              }, 0) / completedRequests.length
-            : 0;
-        const avgTimeHours = (avgTimeMs / 3600).toFixed(1);
-
-        setStats({
-          totalRequests: requests.length,
-          activeRequests: activeCount,
-          completedRequests: completedCount,
-          cancelledRequests: cancelledCount,
-          totalDrivers: driversSnap.size,
-          totalProviders: providersSnap.size,
-          avgCompletionHours: avgTimeHours,
-          successRate:
-            completedCount > 0
-              ? ((completedCount / (completedCount + cancelledCount)) * 100).toFixed(1)
-              : "N/A",
-        });
-        setLoading(false);
-      } catch (err) {
-        console.error("Admin stats error:", err);
-        setError(err.message);
-        setLoading(false);
-      }
-    }
-
     fetchStats();
   }, []);
 
@@ -76,14 +85,30 @@ export default function AdminDashboard() {
     <div className="min-h-screen bg-trust-50">
       <NavBar />
       <main className="max-w-6xl mx-auto px-4 py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-display font-bold text-trust-900">
-            Admin Dashboard
-          </h1>
-          <p className="text-trust-500 mt-1">System overview and metrics</p>
+        <div className="mb-8 flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-display font-bold text-trust-900">
+              Admin Dashboard
+            </h1>
+            <p className="text-trust-500 mt-1">System overview and metrics</p>
+          </div>
+          <button
+            onClick={fetchStats}
+            disabled={loading}
+            className="btn-secondary flex items-center gap-2 py-2 px-3 text-sm"
+          >
+            <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
+            Refresh
+          </button>
         </div>
 
-        {loading ? (
+        {lastUpdated && (
+          <p className="text-xs text-trust-500 mb-6">
+            Last updated: {lastUpdated.toLocaleTimeString()}
+          </p>
+        )}
+
+        {loading && !stats ? (
           <DashboardSkeleton />
         ) : error ? (
           <div className="card p-6 bg-red-50 border border-red-200">
@@ -137,7 +162,7 @@ export default function AdminDashboard() {
             </div>
 
             {/* Users & Requests */}
-            <div className="grid md:grid-cols-2 gap-6 mb-8">
+            <div className="grid md:grid-cols-2 gap-6">
               <div className="card p-6">
                 <h2 className="font-bold text-trust-900 mb-4 flex items-center gap-2">
                   <Users size={18} className="text-trust-400" /> User Base
@@ -145,7 +170,9 @@ export default function AdminDashboard() {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-trust-600">Drivers</span>
-                    <span className="font-semibold text-trust-900">{stats.totalDrivers}</span>
+                    <span className="font-semibold text-trust-900">
+                      {stats.totalDrivers}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-trust-600">Providers</span>
@@ -185,20 +212,6 @@ export default function AdminDashboard() {
                       {stats.avgCompletionHours}h
                     </span>
                   </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Info Card */}
-            <div className="card p-6 bg-blue-50 border border-blue-200">
-              <div className="flex items-start gap-3">
-                <AlertCircle size={18} className="text-blue-600 flex-shrink-0 mt-0.5" />
-                <div className="text-sm text-blue-900">
-                  <p className="font-medium">Real-time metrics</p>
-                  <p className="mt-1">
-                    Stats refresh on page load. For live updates, integrate Firebase
-                    Realtime Database or Cloud Functions.
-                  </p>
                 </div>
               </div>
             </div>
